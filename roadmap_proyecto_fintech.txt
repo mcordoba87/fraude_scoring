@@ -1,0 +1,103 @@
+===============================================================================
+ROADMAP DE PROYECTO: PIPELINE DE DETECCIÓN DE FRAUDE Y SCORING DE CRÉDITO
+Target Roles: Data Engineer / Analytics Engineer
+Stack: Docker Compose, PostgreSQL (OLTP & OLAP), Redpanda, Debezium, MinIO, dbt Core, Metabase, FastAPI
+===============================================================================
+
+FASE 1: CONFIGURACIÓN DE INFRAESTRUCTURA Y ENTORNO LOCAL (DOCKER)
+-------------------------------------------------------------------------------
+[X] 1.1. Estructura de carpetas
+    ├── docker-compose.yml
+    ├── .env.example
+    ├── config/             # Configuraciones de Debezium, Redpanda, etc.
+    ├── scripts/            # Script simulador de transacciones
+    ├── dbt_fintech/        # Proyecto dbt Core
+    └── api/                # Backend FastAPI
+
+[X] 1.2. Docker Compose (Base OLTP & Streaming)
+    - Definir servicio postgres_oltp (PostgreSQL 15+) con la extensión de 
+      Logical Replication activada en postgresql.conf (wal_level = logical).
+    - Definir servicio redpanda (Kafka-compatible broker) y redpanda-console 
+      para interfaz gráfica de tópicos.
+
+[X] 1.3. Docker Compose (CDC, Lakehouse & Tooling)
+    - Definir servicio debezium (Kafka Connect API) configurado para conectarse a Postgres.
+    - Definir servicio minio (S3 local) y crear el bucket inicial fintech-lakehouse.
+    - Definir servicio postgres_olap (o duckdb / trino) como Data Warehouse analítico.
+    - Definir servicio metabase o apache-superset para dashboards.
+
+[X] 1.4. Testear conectividad
+    - Levantar contenedores (`docker compose up -d`) y verificar healthchecks.
+
+
+FASE 2: INGESTA Y STREAMING (DATA ENGINEERING FOCUS)
+-------------------------------------------------------------------------------
+[ ] 2.1. Diseño de Base OLTP
+    - Crear scripts SQL de inicialización en Postgres OLTP:
+      * Tabla users (id, nombre, scoring_crediticio, limite_credito, status_riesgo, updated_at).
+      * Tabla transactions (id, user_id, amount, merchant_category, location, is_flagged_fraud, created_at).
+
+[ ] 2.2. Simulador de Transacciones en Tiempo Real
+    - Escribir script Python (scripts/generator.py) para insertar transacciones continuas.
+    - Incluir anomalías/patrones de fraude simulados (ej. 5 transacciones seguidas 
+      de alto monto en menos de 1 minuto o ubicaciones lejanas).
+
+[ ] 2.3. Configuración de Debezium CDC
+    - Publicar mediante POST a la REST API de Debezium el conector para Postgres.
+    - Verificar en Redpanda Console que los eventos de cambios en `transactions` 
+      lleguen al tópico `postgres_oltp.public.transactions`.
+
+[ ] 2.4. Consumer / Sink Worker
+    - Escribir worker en Python (usando faststream o confluent-kafka) que consuma 
+      de Redpanda, agrupe por micro-batches y guarde archivos Parquet particionados 
+      por fecha (year=/month=/day=) en MinIO.
+
+
+FASE 3: DATA WAREHOUSE Y TRANSFORMACIONES DBT (ANALYTICS ENGINEERING FOCUS)
+-------------------------------------------------------------------------------
+[ ] 3.1. Inicialización de dbt
+    - Configurar dbt-postgres o dbt-duckdb dentro de dbt_fintech/.
+    - Configurar profiles.yml para conectarse a la base OLAP / Lakehouse.
+
+[ ] 3.2. Capa Bronze / Staging (dbt)
+    - Crear stg_transactions.sql: Limpieza de tipos de datos, casteo de timestamps y renombrado.
+    - Crear stg_users.sql: Estandarización de datos de clientes.
+
+[ ] 3.3. Capa Silver / Intermediate (SCD Type 2 & Reglas de Negocio)
+    - Configurar `dbt snapshot` sobre usuarios para registrar cambios en Scoring Crediticio a lo largo del tiempo.
+    - Crear int_user_transaction_velocity.sql: Métricas en ventanas de tiempo (5, 15 y 60 min por usuario).
+
+[ ] 3.4. Capa Gold / Marts (Modelado Dimensional Kimball)
+    - Crear dim_users.sql: Dimensión de usuarios con estado actual e historial de scoring.
+    - Crear fct_transactions.sql: Tabla de hechos transaccionales unificada.
+    - Crear fct_fraud_alerts.sql: Tabla agregada con banderas de posibles fraudes según reglas.
+
+[ ] 3.5. Testing y Calidad de Datos
+    - Implementar tests primarios en schema.yml (unique, not_null, relationships).
+    - Implementar tests con dbt-expectations (ej. expect_column_values_to_be_between para scoring 300-850).
+
+
+FASE 4: VISUALIZACIÓN, API & SERVIDO DE DATOS
+-------------------------------------------------------------------------------
+[ ] 4.1. Dashboard Operativo en Metabase / Superset
+    - Conectar herramienta de BI a las tablas de la capa Gold.
+    - Crear paneles clave: % de fraude por hora/día, distribución por scoring, alertas en vivo.
+
+[ ] 4.2. Capa de API en FastAPI (Backend)
+    - Crear servicio api en FastAPI.
+    - Endpoint GET /api/v1/users/{id}/credit-score: Devuelve scoring histórico de dbt.
+    - Endpoint GET /api/v1/fraud/alerts: Devuelve alertas activas para frontend/app móvil.
+
+[ ] 4.3. Automatización y CI/CD (GitHub Actions)
+    - Configurar workflow que ejecute `sqlfluff lint` y `dbt test` en cada Pull Request.
+
+
+FASE 5: DOCUMENTACIÓN Y PRESENTACIÓN EN GITHUB
+-------------------------------------------------------------------------------
+[ ] 5.1. Diagrama de Arquitectura
+    - Diseñar e incluir diagrama (Mermaid.js o imagen) con el flujo de datos.
+
+[ ] 5.2. Redacción de README.md
+    - Visión general, caso de negocio, stack tecnológico e instrucciones Quickstart (`docker compose up`).
+    - Galería con capturas de pantalla (Redpanda, linaje de dbt, Dashboard).
+===============================================================================

@@ -1,0 +1,29 @@
+{
+  "name": "fintech-postgres-oltp",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "plugin.name": "pgoutput",
+    "database.hostname": "postgres_oltp",
+    "database.port": "5432",
+    "database.user": "oltp_user",
+    "database.password": "oltp_password",
+    "database.dbname": "fintech_oltp",
+    "database.server.name": "fintech_oltp",
+    "topic.prefix": "postgres_oltp",
+    "table.include.list": "public.users,public.transactions",
+    "schema.include.list": "public",
+    "publication.name": "fintech_publication",
+    "publication.autocreate.mode": "all_tables",
+    "slot.name": "fintech_slot",
+    "slot.drop.on.stop": "false",
+    "tombstones.on.delete": "false",
+    "snapshot.mode": "initial",
+    "decimal.handling.mode": "string",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false",
+    "transforms": "unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState"
+  }
+}

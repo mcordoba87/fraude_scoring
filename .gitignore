@@ -1,0 +1,12 @@
+# Entorno y secretos
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Logs y temp
+*.log
+/tmp/

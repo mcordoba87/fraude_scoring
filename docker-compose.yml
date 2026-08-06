@@ -1,0 +1,230 @@
+name: fintech-fraude-scoring
+
+networks:
+  fintech-net:
+    driver: bridge
+
+volumes:
+  pg_oltp_data:
+  pg_olap_data:
+  minio_data:
+  redpanda_data:
+
+services:
+  # ============================================================
+  # PostgreSQL OLTP (fuente operativa / CDC source)
+  # ============================================================
+  postgres_oltp:
+    image: ${POSTGRES_IMAGE:-postgres:15-alpine}
+    container_name: postgres_oltp
+    environment:
+      POSTGRES_DB: ${POSTGRES_OLTP_DB:-fintech_oltp}
+      POSTGRES_USER: ${POSTGRES_OLTP_USER:-oltp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_OLTP_PASSWORD:-oltp_password}
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_wal_senders=4"
+      - "-c"
+      - "max_replication_slots=4"
+    ports:
+      - "${POSTGRES_OLTP_PORT:-5432}:5432"
+    volumes:
+      - pg_oltp_data:/var/lib/postgresql/data
+      - ./config/init_oltp:/docker-entrypoint-initdb.d:ro
+    networks:
+      - fintech-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_OLTP_USER:-oltp_user} -d ${POSTGRES_OLTP_DB:-fintech_oltp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ============================================================
+  # Redpanda (broker Kafka-compatible)
+  # ============================================================
+  redpanda:
+    image: ${REDPANDA_IMAGE:-docker.redpanda.com/redpandadata/redpanda:v24.3.11}
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --smp
+      - "1"
+      - --memory
+      - 1G
+      - --overprovisioned
+      - --node-id
+      - "0"
+      - --kafka-addr
+      - "PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:19092"
+      - --advertise-kafka-addr
+      - "PLAINTEXT://redpanda:9092,PLAINTEXT_HOST://localhost:19092"
+      - --pandaproxy-addr
+      - "PLAINTEXT://0.0.0.0:8082"
+      - --advertise-pandaproxy-addr
+      - "PLAINTEXT://redpanda:8082"
+      - --rpc-addr
+      - "0.0.0.0:33145"
+      - --advertise-rpc-addr
+      - "redpanda:33145"
+      - --set
+      - "redpanda.auto_create_topics_enabled=true"
+      - --set
+      - "redpanda.default_topic_partitions=3"
+      - --set
+      - "redpanda.enable_metrics_reporter=false"
+    ports:
+      - "${REDPANDA_KAFKA_PORT:-9092}:9092"
+      - "${REDPANDA_ADMIN_PORT:-9644}:9644"
+      - "${REDPANDA_SCHEMA_PORT:-8081}:8081"
+      - "19092:19092"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    networks:
+      - fintech-net
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health", "--exit-when-healthy"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+  # ============================================================
+  # Redpanda Console (UI de tópicos)
+  # ============================================================
+  redpanda-console:
+    image: ${REDPANDA_CONSOLE_IMAGE:-docker.redpanda.com/redpandadata/console:v3.9.0}
+    container_name: redpanda-console
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    ports:
+      - "${REDPANDA_CONSOLE_PORT:-8080}:8080"
+    networks:
+      - fintech-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ============================================================
+  # Debezium (Kafka Connect / CDC) - el conector se publica en Fase 2
+  # ============================================================
+  debezium:
+    image: ${DEBEZIUM_IMAGE:-debezium/connect:3.0.0.Final}
+    container_name: debezium
+    environment:
+      BOOTSTRAP_SERVERS: redpanda:9092
+      GROUP_ID: ${DEBEZIUM_GROUP_ID:-connect-cluster}
+      CONFIG_STORAGE_TOPIC: ${DEBEZIUM_CONFIG_STORAGE_TOPIC:-connect-configs}
+      OFFSET_STORAGE_TOPIC: ${DEBEZIUM_OFFSET_STORAGE_TOPIC:-connect-offsets}
+      STATUS_STORAGE_TOPIC: ${DEBEZIUM_STATUS_STORAGE_TOPIC:-connect-status}
+      CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_HEAP_OPTS: "${DEBEZIUM_HEAP_OPTS:--Xms512m -Xmx1g}"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    ports:
+      - "${DEBEZIUM_PORT:-8083}:8083"
+    networks:
+      - fintech-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+  # ============================================================
+  # MinIO (S3 local / lakehouse)
+  # ============================================================
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2024-12-18T13-15-44Z}
+    container_name: minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - fintech-net
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+  # MinIO sidecar temporal: crea el bucket inicial y sale
+  minio-init:
+    image: ${MC_IMAGE:-minio/mc:RELEASE.2024-11-21T17-21-54Z}
+    container_name: minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MC_HOST_local: "http://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin}@minio:9000"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "mc mb --ignore-existing local/${MINIO_BUCKET:-fintech-lakehouse} && echo 'Bucket listo' && exit 0"
+    networks:
+      - fintech-net
+
+  # ============================================================
+  # PostgreSQL OLAP (data warehouse para dbt / Metabase)
+  # ============================================================
+  postgres_olap:
+    image: ${POSTGRES_IMAGE:-postgres:15-alpine}
+    container_name: postgres_olap
+    environment:
+      POSTGRES_DB: ${POSTGRES_OLAP_DB:-fintech_olap}
+      POSTGRES_USER: ${POSTGRES_OLAP_USER:-olap_user}
+      POSTGRES_PASSWORD: ${POSTGRES_OLAP_PASSWORD:-olap_password}
+    ports:
+      - "${POSTGRES_OLAP_PORT:-5433}:5432"
+    volumes:
+      - pg_olap_data:/var/lib/postgresql/data
+    networks:
+      - fintech-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_OLAP_USER:-olap_user} -d ${POSTGRES_OLAP_DB:-fintech_olap}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ============================================================
+  # Metabase (BI / dashboards)
+  # ============================================================
+  metabase:
+    image: ${METABASE_IMAGE:-metabase/metabase:v0.52.5}
+    container_name: metabase
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${POSTGRES_OLAP_DB:-fintech_olap}
+      MB_DB_PORT: "5432"
+      MB_DB_USER: ${POSTGRES_OLAP_USER:-olap_user}
+      MB_DB_PASS: ${POSTGRES_OLAP_PASSWORD:-olap_password}
+      MB_DB_HOST: postgres_olap
+      JAVA_OPTS: "${METABASE_JAVA_OPTS:--Xms256m -Xmx1g}"
+    depends_on:
+      postgres_olap:
+        condition: service_healthy
+    ports:
+      - "${METABASE_PORT:-3000}:3000"
+    networks:
+      - fintech-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health | grep -q 'status.*ok' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30

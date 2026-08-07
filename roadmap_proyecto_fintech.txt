@@ -177,26 +177,54 @@ MODIFICADOS:
 
 FASE 3: DATA WAREHOUSE Y TRANSFORMACIONES DBT (ANALYTICS ENGINEERING FOCUS)
 -------------------------------------------------------------------------------
-[ ] 3.1. Inicialización de dbt
-    - Configurar dbt-postgres o dbt-duckdb dentro de dbt_fintech/.
-    - Configurar profiles.yml para conectarse a la base OLAP / Lakehouse.
+[X] 3.1. Inicialización de dbt
+    - dbt-postgres contra postgres_olap (5433) en dbt_fintech/.
+    - profiles.yml (fintech_lakehouse) y dbt_project.yml configurados.
+    - packages.yml -> dbt_expectations (vía `dbt deps`).
+    - Bridge del lakehouse -> DW: scripts/load_lakehouse.py (Parquet/CSV de
+      MinIO -> raw.* en postgres_olap; TRUNCATE + COPY, idempotente).
+      (El anexo 8 lo dejaba en "solo landing"; con dbt-postgres el loader es
+      el puente documentado.)
 
-[ ] 3.2. Capa Bronze / Staging (dbt)
-    - Crear stg_transactions.sql: Limpieza de tipos de datos, casteo de timestamps y renombrado.
-    - Crear stg_users.sql: Estandarización de datos de clientes.
+[X] 3.2. Capa Bronze / Staging (dbt)
+    - stg_transactions.sql: casteo de tipos (amount NUMERIC), timestamps,
+      dedup por id y renombrado snake_case.
+    - stg_users.sql: estandarización (trim nombre, lower status_riesgo), dedup
+      por último updated_at.
+    - stg_cards.sql: tarjetas anonimizadas (sin PAN/CVV).
+    - stg_card_movements.sql: movimientos del CSV diario (landing).
 
-[ ] 3.3. Capa Silver / Intermediate (SCD Type 2 & Reglas de Negocio)
-    - Configurar `dbt snapshot` sobre usuarios para registrar cambios en Scoring Crediticio a lo largo del tiempo.
-    - Crear int_user_transaction_velocity.sql: Métricas en ventanas de tiempo (5, 15 y 60 min por usuario).
+[X] 3.3. Capa Silver / Intermediate (SCD Type 2 & Reglas de Negocio)
+    - dbt snapshot (snap_users_scoring) sobre usuarios: registra el historial
+      de Scoring Crediticio a lo largo del tiempo (timestamp strategy).
+      * worker.py ampliado: persiste postgres_oltp.public.users -> users/.
+      * generator.py: ahora actualiza scoring/riesgo periódicamente para que
+        el snapshot capture cambios reales.
+    - int_user_transaction_velocity.sql: métricas en ventanas 5/15/60 min por
+      usuario (macros count_tx / sum_tx).
 
-[ ] 3.4. Capa Gold / Marts (Modelado Dimensional Kimball)
-    - Crear dim_users.sql: Dimensión de usuarios con estado actual e historial de scoring.
-    - Crear fct_transactions.sql: Tabla de hechos transaccionales unificada.
-    - Crear fct_fraud_alerts.sql: Tabla agregada con banderas de posibles fraudes según reglas.
+[X] 3.4. Capa Gold / Marts (Modelado Dimensional Kimball)
+    - dim_users.sql: dimensión de usuarios con estado actual e historial de
+      scoring (is_current, valid_from/valid_to).
+    - fct_transactions.sql: tabla de hechos transaccional unificada.
+    - fct_fraud_alerts.sql: alertas por reglas:
+        1) monto >= 5000
+        2) monto > limite de crédito del usuario
+        3) >= 5 transacciones del usuario en 5 min
+        4) ubicación de la tx != ubicación del usuario
+        5) bandera is_flagged_fraud de OLTP
 
-[ ] 3.5. Testing y Calidad de Datos
-    - Implementar tests primarios en schema.yml (unique, not_null, relationships).
-    - Implementar tests con dbt-expectations (ej. expect_column_values_to_be_between para scoring 300-850).
+[X] 3.5. Testing y Calidad de Datos
+    - Tests primarios en schema.yml (unique, not_null).
+    - dbt_expectations: expect_column_values_to_be_between (scoring 300-850,
+      amount >= 0, cnt_5min >= 1) en intermediate/ y marts/.
+
+EJECUCIÓN (orden sugerido):
+    ./venv/bin/pip install dbt-postgres
+    cd dbt_fintech && ../venv/bin/dbt deps
+    ../venv/bin/python ../scripts/load_lakehouse.py
+    ../venv/bin/dbt run && ../venv/bin/dbt snapshot && ../venv/bin/dbt test
+    (perfil: DBT_PROFILES_DIR=dbt_fintech)
 
 
 FASE 4: VISUALIZACIÓN, API & SERVIDO DE DATOS

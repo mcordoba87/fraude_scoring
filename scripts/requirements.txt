@@ -6,3 +6,7 @@ python-dotenv>=1.0
 fastapi>=0.110
 uvicorn>=0.30
 requests>=2.31
+
+# dbt (Analytics Engineering, fase 3) se instala aparte:
+#   ./venv/bin/pip install dbt-postgres
+#   ./venv/bin/dbt deps   (dentro de dbt_fintech/ -> dbt-expectations)

@@ -36,7 +36,8 @@ fintech, con tres usos principales:
      se persiste.
    - Un proceso batch diario simula un sistema legado que deja un CSV en la
      landing zone de MinIO.
-   - Detalle completo en `plan_ingresos_realistas.txt`.
+   - Detalle completo en el anexo de la Fase 3 del
+     [`roadmap_proyecto_fintech.txt`](roadmap_proyecto_fintech.txt).
 
 3. **Scoring y data warehouse**
    - Base OLTP con usuarios (scoring 300–850, límite, riesgo) y transacciones.
@@ -98,7 +99,17 @@ fintech, con tres usos principales:
 
    TODOS LOS FLUJOS CONVERGEN (Fase 3 principal)
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-       dbt (Fase 3) -> PostgreSQL OLAP (5433) -> Metabase (3000)
+       MinIO lakehouse
+          |
+          v  scripts/load_lakehouse.py   (bridge lakehouse -> DW)
+          v
+   PostgreSQL OLAP (5433)  tablas raw.*
+          |
+          v  dbt (Fase 3): staging -> intermediate -> marts
+   dim_users / fct_transactions / fct_fraud_alerts
+          |
+          v
+   Metabase (3000)  -> data source "Data Warehouse (OLAP)"
 ```
 
 ---
@@ -191,6 +202,40 @@ curl -s http://localhost:8083/connectors   # -> ["fintech-postgres-oltp"]
 > Los micro-batches del worker se escriben cuando se acumulan (`BATCH_MAX`,
 > default 200) o pasa el `BATCH_TIMEOUT_S` (5 s), configurable vía `.env`.
 
+### 9. Fase 3 — dbt y Data Warehouse (Analytics Engineering)
+
+**Flujo:** `MinIO (lakehouse)` -> `load_lakehouse.py` -> `PostgreSQL OLAP (raw.*)` -> `dbt` (staging/intermediate/marts) -> `Metabase`.
+
+```bash
+# 1) Preparar dbt (solo la primera vez)
+./venv/bin/pip install dbt-postgres
+cd dbt_fintech && ../venv/bin/dbt deps      # instala dbt-expectations
+
+# 2) Bridge: copiar Parquet/CSV de MinIO a tablas raw.* en OLAP (5433)
+cd .. && ./venv/bin/python scripts/load_lakehouse.py
+
+# 3) Ejecutar transformaciones (perfil en dbt_fintech/)
+cd dbt_fintech
+DBT_PROFILES_DIR=$PWD ../venv/bin/dbt run
+DBT_PROFILES_DIR=$PWD ../venv/bin/dbt snapshot     # SCD2 de scoring de usuarios
+DBT_PROFILES_DIR=$PWD ../venv/bin/dbt test         # 26 tests de calidad
+
+# 4) Ver en Metabase: Admin -> Databases -> "Data Warehouse (OLAP)"
+#    (fuente ya conectada a fintech_olap; marts en public_marts.*)
+```
+
+**Capas del modelo:**
+- **Bronze (staging):** `stg_transactions`, `stg_users`, `stg_cards`, `stg_card_movements` (dedup y tipado).
+- **Silver (intermediate):** snapshot SCD2 `snap_users_scoring` (historial de scoring) +
+  `int_user_transaction_velocity` (ventanas 5/15/60 min por usuario).
+- **Gold (marts):** `dim_users`, `fct_transactions`, `fct_fraud_alerts`.
+  Reglas de alerta: monto >= 5000, monto > límite de crédito, >= 5 tx en 5 min,
+  ubicación distinta a la del usuario, o flag `is_flagged_fraud` de OLTP.
+
+> El `profiles.yml` queda dentro de `dbt_fintech/`; se apunta con
+> `DBT_PROFILES_DIR`. El loader `load_lakehouse.py` es el puente que el anexo
+> de la Fase 3 dejaba pendiente (dbt-postgres no lee Parquet directo).
+
 ---
 
 ## Qué partes están hechas hasta ahora
@@ -208,14 +253,22 @@ curl -s http://localhost:8083/connectors   # -> ["fintech-postgres-oltp"]
 - [x] Sink worker a Parquet particionado en MinIO (`worker.py`)
 - **Validada E2E** en vivo (OLTP -> CDC -> Redpanda -> MinIO).
 
-### Fase 3 — Data Warehouse y dbt (EN PROGRESO)
-- [ ] dbt (staging, snapshots, marts, tests) — aún no inicializado
-- [x] **Anexo: Ingresos realistas de datos** (plan_ingresos_realistas.txt):
-  - Mock API de tarjetas con PII (puerto 8001)
-  - Ingestor con masking PII -> tópico `cards.api`
-  - Worker multi-tópico -> Parquet en `cards/`
-  - Batch diario CSV -> landing en MinIO
-  - ítems de verificación 1-13 marcados como hechos
+### Fase 3 — Data Warehouse y dbt (COMPLETA)
+- [x] dbt-postgres inicializado (`dbt_fintech/`), perfil `fintech_lakehouse`
+      apuntando a `postgres_olap` (5433).
+- [x] `packages.yml` con `dbt_expectations` (instalado con `dbt deps`).
+- [x] Bridge lakehouse -> DW: `scripts/load_lakehouse.py` (Parquet/CSV de
+      MinIO -> tablas `raw.*` en `postgres_olap`, idempotente).
+- [x] Capa bronze: `stg_transactions`, `stg_users`, `stg_cards`,
+      `stg_card_movements`.
+- [x] Capa silver: snapshot SCD2 (`snap_users_scoring`) +
+      `int_user_transaction_velocity` (5/15/60 min).
+- [x] Capa gold: `dim_users`, `fct_transactions`, `fct_fraud_alerts`
+      (reglas de alerta por monto, límite, velocidad y ubicación).
+- [x] Tests: primarios (`unique`, `not_null`) + `dbt_expectations`
+      (scoring 300-850, amount >= 0).
+- [x] Worker ampliado para persistir usuarios (`users/`) y generador que
+      actualiza scoring periódicamente (alimenta el SCD2).
 
 ### Fase 4 — Visualización y API (PENDIENTE)
 - [ ] Dashboard Metabase / Superset
@@ -238,7 +291,6 @@ curl -s http://localhost:8083/connectors   # -> ["fintech-postgres-oltp"]
 ├── .gitignore
 ├── README.md
 ├── roadmap_proyecto_fintech.txt  # roadmap con checkboxes de fases
-├── plan_ingresos_realistas.txt   # plan de ingresos realistas (PII + batch)
 ├── config/
 │   ├── debezium/postgres-connector.json
 │   └── init_oltp/01_init.sql    # DDL OLTP (users, transactions)
@@ -247,14 +299,21 @@ curl -s http://localhost:8083/connectors   # -> ["fintech-postgres-oltp"]
 │   ├── worker.py                # consumidor multi-tópico -> MinIO
 │   ├── ingest_cards.py          # ingesta tarjetas + masking PII
 │   ├── daily_batch_csv.py       # batch diario -> landing CSV
+│   ├── load_lakehouse.py        # MinIO Parquet/CSV -> raw.* en OLAP (fase 3)
 │   └── requirements.txt
 ├── api/
 │   └── mock_cards_api.py        # Mock API de tarjetas (FastAPI, 8001)
 ├── venv/                        # (no commiteado)
-└── dbt_fintech/                 # proyecto dbt (a crear en Fase 3)
+└── dbt_fintech/                 # proyecto dbt (fase 3)
+    ├── dbt_project.yml
+    ├── profiles.yml
+    ├── packages.yml             # dbt_expectations
+    ├── snapshots/               # snap_users_scoring.sql
+    ├── macros/                  # count_tx / sum_tx
+    └── models/{staging,intermediate,marts}/
 ```
 
 ---
 
 *Para seguimiento de pendientes, revisar los checkboxes del
-`roadmap_proyecto_fintech.txt` y de `plan_ingresos_realistas.txt`.*
+`roadmap_proyecto_fintech.txt`.*

@@ -43,6 +43,48 @@ CITIES = {
 
 RISK_LEVELS = ["bajo", "medio", "alto"]
 
+SCORING_UPDATE_EVERY = 20
+SCORING_UPDATE_PROB = 0.3
+
+
+def risk_for_scoring(scoring):
+    if scoring >= 700:
+        return "bajo"
+    if scoring >= 550:
+        return "medio"
+    return "alto"
+
+
+def refresh_user_scoring(conn, user_id):
+    """Actualiza scoring/limite/riesgo de un usuario para alimentar el SCD2."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT scoring_crediticio, limite_credito FROM users WHERE id = %s",
+        (user_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        return
+    current, limit = row
+    delta = random.randint(-60, 60)
+    new_scoring = max(300, min(850, current + delta))
+    if new_scoring >= 700:
+        new_limit = random.randint(200000, 500000)
+    elif new_scoring >= 550:
+        new_limit = random.randint(50000, 199999)
+    else:
+        new_limit = random.randint(10000, 49999)
+    cur.execute(
+        """UPDATE users
+           SET scoring_crediticio = %s, limite_credito = %s,
+               status_riesgo = %s, updated_at = now()
+           WHERE id = %s""",
+        (new_scoring, new_limit, risk_for_scoring(new_scoring), user_id),
+    )
+    conn.commit()
+    cur.close()
+
 
 def seed_users(conn, n=50):
     cur = conn.cursor()
@@ -135,6 +177,10 @@ def main():
             )
             conn.commit()
             count += 1
+            if count % SCORING_UPDATE_EVERY == 0:
+                target = random.choice(users)
+                if random.random() < SCORING_UPDATE_PROB:
+                    refresh_user_scoring(conn, target["id"])
             if args.limit and count >= args.limit:
                 break
             time.sleep(args.delay)

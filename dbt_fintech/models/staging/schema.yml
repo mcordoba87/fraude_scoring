@@ -1,0 +1,63 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    description: "Capas crudas del lakehouse cargadas por scripts/load_lakehouse.py"
+    tables:
+      - name: transactions
+        columns: &raw_transactions_cols
+          - name: id
+            description: "PK de la transaccion"
+          - name: user_id
+          - name: amount
+          - name: merchant_category
+          - name: location
+          - name: is_flagged_fraud
+          - name: created_at
+      - name: users
+        columns: &raw_users_cols
+          - name: id
+          - name: nombre
+          - name: scoring_crediticio
+          - name: limite_credito
+          - name: status_riesgo
+          - name: location
+          - name: updated_at
+      - name: cards
+        description: "Tarjetas anonimizadas (sin PAN/CVV)."
+      - name: card_movements
+        description: "Movimientos de tarjetas desde el CSV diario legacy."
+
+models:
+  - name: stg_transactions
+    description: "Transacciones limpias y tipadas (bronze)."
+    columns:
+      - name: transaction_id
+        tests: [not_null, unique]
+      - name: user_id
+        tests: [not_null]
+      - name: created_at
+        tests: [not_null]
+
+  - name: stg_users
+    description: "Usuarios estandarizados (bronze)."
+    columns:
+      - name: user_id
+        tests: [not_null, unique]
+      - name: scoring_crediticio
+        tests: [not_null]
+
+  - name: stg_cards
+    description: "Tarjetas anonimizadas (bronze)."
+    columns:
+      - name: card_id
+        tests: [not_null, unique]
+      - name: user_id
+        tests: [not_null]
+
+  - name: stg_card_movements
+    description: "Movimientos de tarjetas desde CSV daily (bronze)."
+    columns:
+      - name: source_id
+        tests: [not_null, unique]

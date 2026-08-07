@@ -5,6 +5,7 @@ fecha (year/=/month=/day=) bajo el prefijo de cada topico.
 
 Soportados (TOPIC -> PREFIX):
     postgres_oltp.public.transactions -> fintech-lakehouse/transactions/
+    postgres_oltp.public.users       -> fintech-lakehouse/users/
     cards.api                        -> fintech-lakehouse/cards/
 
 Uso:
@@ -37,6 +38,7 @@ MINIO_SECRET = os.getenv(
 BUCKET = os.getenv("MINIO_BUCKET", "fintech-lakehouse")
 
 TRANSACTIONS_TOPIC = "postgres_oltp.public.transactions"
+USERS_TOPIC = "postgres_oltp.public.users"
 CARDS_TOPIC = os.getenv("CARDS_TOPIC", "cards.api")
 
 SCHEMA_TRANSACTIONS = pa.schema([
@@ -57,6 +59,16 @@ SCHEMA_CARDS = pa.schema([
     ("cardholder_masked", pa.string()),
     ("exp_date", pa.string()),
     ("ingested_at", pa.timestamp("us")),
+])
+
+SCHEMA_USERS = pa.schema([
+    ("id", pa.int64()),
+    ("nombre", pa.string()),
+    ("scoring_crediticio", pa.int64()),
+    ("limite_credito", pa.float64()),
+    ("status_riesgo", pa.string()),
+    ("location", pa.string()),
+    ("updated_at", pa.timestamp("us")),
 ])
 
 
@@ -123,19 +135,43 @@ def parse_card(value_bytes):
     }
 
 
-# TOPIC -> (PREFIX, parser, schema)
+def parse_user(value_bytes):
+    if not value_bytes:
+        return None
+    try:
+        d = json.loads(value_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    ts = parse_ts(d.get("updated_at"))
+    if not ts:
+        return None
+    return {
+        "id": d.get("id"),
+        "nombre": d.get("nombre"),
+        "scoring_crediticio": d.get("scoring_crediticio"),
+        "limite_credito": parse_number(d.get("limite_credito")),
+        "status_riesgo": d.get("status_riesgo"),
+        "location": d.get("location"),
+        "updated_at": ts,
+    }
+
+
+# TOPIC -> (PREFIX, parser, schema, time_field)
 HANDLERS = {
-    TRANSACTIONS_TOPIC: ("transactions", parse_transaction, SCHEMA_TRANSACTIONS),
-    CARDS_TOPIC: ("cards", parse_card, SCHEMA_CARDS),
+    TRANSACTIONS_TOPIC: ("transactions", parse_transaction, SCHEMA_TRANSACTIONS, "created_at"),
+    USERS_TOPIC: ("users", parse_user, SCHEMA_USERS, "updated_at"),
+    CARDS_TOPIC: ("cards", parse_card, SCHEMA_CARDS, "ingested_at"),
 }
 
 
-def write_batch(fs, prefix, schema, rows):
+def write_batch(fs, prefix, schema, rows, time_field):
     if not rows:
         return
     by_date = {}
     for r in rows:
-        ts = r.get("created_at") or r.get("ingested_at")
+        ts = r.get(time_field)
+        if ts is None:
+            continue
         key = ts.date()
         by_date.setdefault(key, []).append(r)
     for date, group in by_date.items():
@@ -156,7 +192,7 @@ def write_batch(fs, prefix, schema, rows):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--topic", default=None,
-                        help="Solo procesar este topico (transactions o cards)")
+                        help="Solo procesar este topico (transactions, users o cards)")
     args = parser.parse_args()
 
     import s3fs
@@ -198,18 +234,18 @@ def main():
             else:
                 pair = HANDLERS.get(msg.topic())
                 if pair:
-                    prefix, parser, schema = pair
+                    prefix, parser, schema, time_field = pair
                     row = parser(msg.value())
                     if row:
                         buffers[msg.topic()].append(row)
 
             now = time.time()
             for t in topics:
-                prefix, schema = HANDLERS[t][0], HANDLERS[t][2]
+                prefix, schema, time_field = HANDLERS[t][0], HANDLERS[t][2], HANDLERS[t][3]
                 if buffers[t] and (
                         len(buffers[t]) >= BATCH_MAX
                         or now - batch_start[t] >= BATCH_TIMEOUT_S):
-                    write_batch(fs, prefix, schema, buffers[t])
+                    write_batch(fs, prefix, schema, buffers[t], time_field)
                     buffers[t] = []
                     batch_start[t] = now
 
@@ -222,8 +258,8 @@ def main():
     except KeyboardInterrupt:
         for t in buffers:
             if buffers[t]:
-                prefix, schema = HANDLERS[t][0], HANDLERS[t][2]
-                write_batch(fs, prefix, schema, buffers[t])
+                prefix, schema, time_field = HANDLERS[t][0], HANDLERS[t][2], HANDLERS[t][3]
+                write_batch(fs, prefix, schema, buffers[t], time_field)
         print("[worker] detenido")
     finally:
         consumer.close()

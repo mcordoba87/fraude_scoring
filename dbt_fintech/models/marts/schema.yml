@@ -1,0 +1,37 @@
+version: 2
+
+models:
+  - name: dim_users
+    description: "Dimension de usuarios con historial SCD2 del scoring."
+    columns:
+      - name: user_sk
+        tests: [not_null, unique]
+      - name: scoring_crediticio
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 300
+                max_value: 850
+
+  - name: fct_transactions
+    description: "Tabla de hechos transaccional unificada."
+    columns:
+      - name: transaction_id
+        tests: [not_null, unique]
+      - name: amount_usd
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+
+  - name: fct_fraud_alerts
+    description: "Alertas de fraude por transaccion segun reglas de negocio."
+    columns:
+      - name: transaction_id
+        tests: [not_null, unique]
+      - name: is_fraud_alert
+        tests:
+          - accepted_values:
+              values: [true, false]

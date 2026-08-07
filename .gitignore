@@ -10,3 +10,14 @@ venv/
 # Logs y temp
 *.log
 /tmp/
+
+# dbt (proyecto dbt_fintech)
+# instalado con `dbt deps`, se regenera
+dbt_fintech/dbt_packages/
+# artefactos compilados/ejecutados
+dbt_fintech/target/
+dbt_fintech/logs/
+# preferencias locales del usuario
+dbt_fintech/.user.yml
+# contiene credenciales (documentado en README)
+dbt_fintech/profiles.yml

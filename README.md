@@ -62,28 +62,43 @@ fintech, con tres usos principales:
 ## Arquitectura (resumen)
 
 ```
-                        +------ CDC (Debezium) -------+
-  Simulador (OLTP) ---->|  postgres_oltp.public.*     |---> Redpanda
-  Postgres (Docker)     +------------------------------+      (streaming/streaming)
-                                    |
-                                    v
-                          Redpanda tópicos
-                                    |
-         +--------------------------+--------------------------+
-         v                                                    v
-  postgres_oltp.public.transactions                    cards.api
-  postgres_oltp.public.users                  ... (data PII anonimizada)
-         |
-         +--------- Worker (scripts/worker.py) ---------+
-                                                    |
-                                                    v
-                                  MinIO lakehouse
-                             /cards/  (Parquet anonimizado)
-                        /transactions/ (Parquet CDC)
-                            /landing/cards_daily/  (CSV batch)
-                                                    |
-                                                    v
-                                dbt (Fase 3) --> Postgres OLAP --> Metabase
+   FLUJO 1 - TRANSACCIONES (streaming / CDC)
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                               +------- CDC (Debezium) --------+
+   Simulador (OLTP) ---------->| postgres_oltp.public.transactions |--> Redpanda
+   Postgres (Docker, 5432)     +-------------------------------+     tópico
+                                  postgres_oltp.public.transactions / .users
+                                          |
+                                          v
+                                Worker (scripts/worker.py)
+                                          |
+                                          v
+                                MinIO lakehouse  (bucket fintech-lakehouse)
+                                /transactions/  (Parquet CDC particionado)
+
+   FLUJO 2 - TARJETAS / PII (streaming con anonimización)
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                                       Mock Cards API (FastAPI, 8001)
+                                       GET /cards -> PAN/CVV/cardholder (crudo)
+                                          |
+                                          v
+                               Ingestor (scripts/ingest_cards.py)
+                               masking PII: PAN->últ.4, CVV DESCARTADO, titular***
+                                          |
+                                          v
+                               Redpanda tópico  cards.api --> Worker (worker.py)
+                                          |
+                                          v
+                               MinIO lakehouse  /cards/  (Parquet anonimizado, SIN PAN/CVV)
+
+   FLUJO 3 - BATCH DIARIO (CSV legacy)
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   daily_batch_csv.py (scripts/daily_batch_csv.py)  
+   ----------> MinIO lakehouse  /landing/cards_daily/YYYY-MM-DD/movimientos.csv
+
+   TODOS LOS FLUJOS CONVERGEN (Fase 3 principal)
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       dbt (Fase 3) -> PostgreSQL OLAP (5433) -> Metabase (3000)
 ```
 
 ---

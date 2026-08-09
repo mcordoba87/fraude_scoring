@@ -26,13 +26,14 @@ with tx as (
         ft.is_flagged_fraud,
         v.cnt_5min,
         du.limite_credito,
-        du.location                           as user_location
-    from {{ ref('fct_transactions') }} ft
-    left join {{ ref('int_user_transaction_velocity') }} v
-        on v.transaction_id = ft.transaction_id
-    left join {{ ref('dim_users') }} du
-        on du.user_id = ft.user_id
-       and du.is_current
+        du.location as user_location
+    from {{ ref('fct_transactions') }} as ft
+    left join {{ ref('int_user_transaction_velocity') }} as v
+        on ft.transaction_id = v.transaction_id
+    left join {{ ref('dim_users') }} as du
+        on
+            ft.user_id = du.user_id
+            and du.is_current
 ),
 
 alerts as (
@@ -42,24 +43,19 @@ alerts as (
         created_at,
         amount_usd,
         merchant_category,
-        case
-            when amount_usd >= 5000 then true else false
-        end                                                    as alert_high_amount,
-        case
-            when limite_credito is not null and amount_usd > limite_credito then true
-            else false
-        end                                                    as alert_limit_exceeded,
-        case
-            when cnt_5min >= 5 then true
-            else false
-        end                                                    as alert_velocity,
-        case
-            when user_location is not null
-             and location is not null
-             and location <> user_location then true
-            else false
-        end                                                    as alert_location_shift,
-        coalesce(is_flagged_fraud, false)                       as alert_source_flag
+        coalesce(amount_usd >= 5000, false) as alert_high_amount,
+        coalesce(
+            limite_credito is not null and amount_usd > limite_credito,
+            false
+        ) as alert_limit_exceeded,
+        coalesce(cnt_5min >= 5, false) as alert_velocity,
+        coalesce(
+            user_location is not null
+            and location is not null
+            and location <> user_location,
+            false
+        ) as alert_location_shift,
+        coalesce(is_flagged_fraud, false) as alert_source_flag
     from tx
 )
 

@@ -1,0 +1,14 @@
+[sqlfluff]
+dialect = postgres
+templater = dbt
+max_line_length = 100
+# RF04: "location" no es keyword reservado en PostgreSQL (falso positivo).
+# LT02/LT05: el formato multilinea del repo es mas legible que el estricto.
+exclude_rules = RF04, LT05, LT02
+
+[sqlfluff:templater:dbt]
+project_dir = dbt_fintech
+profiles_dir = dbt_fintech
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower

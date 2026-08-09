@@ -103,10 +103,15 @@ def parse_transaction(value_bytes):
     ts = parse_ts(d.get("created_at"))
     if not ts:
         return None
+    amount = parse_number(d.get("amount"))
+    # El snapshot inicial de Debezium puede serializar NUMERIC como bytes
+    # ilegibles (artefacto); si no es numero valido descartamos la fila.
+    if amount is None:
+        return None
     return {
         "id": d.get("id"),
         "user_id": d.get("user_id"),
-        "amount": parse_number(d.get("amount")),
+        "amount": amount,
         "merchant_category": d.get("merchant_category"),
         "location": d.get("location"),
         "is_flagged_fraud": bool(d.get("is_flagged_fraud")),

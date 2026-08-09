@@ -19,10 +19,11 @@ with fact as (
         du.user_sk,
         du.scoring_crediticio,
         du.status_riesgo
-    from {{ ref('stg_transactions') }} st
-    left join {{ ref('dim_users') }} du
-        on du.user_id = st.user_id
-       and du.is_current
+    from {{ ref('stg_transactions') }} as st
+    left join {{ ref('dim_users') }} as du
+        on
+            st.user_id = du.user_id
+            and du.is_current
 )
 
 select *

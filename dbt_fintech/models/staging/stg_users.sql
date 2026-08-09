@@ -6,7 +6,7 @@
 
 with source as (
     select
-        id                  as user_id,
+        id as user_id,
         nombre,
         scoring_crediticio,
         limite_credito,
@@ -19,12 +19,12 @@ with source as (
 renamed as (
     select
         user_id,
-        nullif(trim(nombre), '')              as nombre,
         scoring_crediticio,
-        cast(limite_credito as numeric(15,2)) as limite_credito,
+        cast(limite_credito as numeric(15, 2)) as limite_credito,
+        updated_at,
+        nullif(trim(nombre), '') as nombre,
         lower(nullif(trim(status_riesgo), '')) as status_riesgo,
-        nullif(trim(location), '')            as location,
-        updated_at
+        nullif(trim(location), '') as location
     from source
 ),
 

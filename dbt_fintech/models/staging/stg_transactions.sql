@@ -6,7 +6,7 @@
 
 with source as (
     select
-        id                     as transaction_id,
+        id as transaction_id,
         user_id,
         amount,
         merchant_category,
@@ -20,11 +20,11 @@ renamed as (
     select
         transaction_id,
         user_id,
-        cast(amount as numeric(15,2))   as amount_usd,
+        cast(amount as numeric(15, 2)) as amount_usd,
+        created_at,
         nullif(trim(merchant_category), '') as merchant_category,
-        nullif(trim(location), '')      as location,
-        coalesce(is_flagged_fraud, false) as is_flagged_fraud,
-        created_at
+        nullif(trim(location), '') as location,
+        coalesce(is_flagged_fraud, false) as is_flagged_fraud
     from source
 ),
 

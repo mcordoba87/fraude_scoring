@@ -19,5 +19,4 @@ select
     location,
     updated_at
 from {{ ref('stg_users') }}
-
 {% endsnapshot %}

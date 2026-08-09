@@ -18,13 +18,13 @@ with source as (
 
 renamed as (
     select
-        id                                      as source_id,
+        id as source_id,
         card_id,
-        cast(date as timestamp)                 as movement_date,
-        cast(amount as numeric(15,2))           as amount_usd,
-        nullif(trim(merchant_category), '')     as merchant_category,
-        nullif(trim(location), '')              as location,
-        source_date
+        cast(date as timestamp) as movement_date,
+        cast(amount as numeric(15, 2)) as amount_usd,
+        source_date,
+        nullif(trim(merchant_category), '') as merchant_category,
+        nullif(trim(location), '') as location
     from source
 )
 

@@ -24,10 +24,10 @@ renamed as (
         card_id,
         user_id,
         pan_last_masked,
-        nullif(trim(card_type), '')        as card_type,
         cardholder_masked,
-        nullif(trim(exp_date), '')         as exp_date,
         ingested_at,
+        nullif(trim(card_type), '') as card_type,
+        nullif(trim(exp_date), '') as exp_date,
         row_number() over (partition by card_id order by ingested_at desc) as row_num
     from source
 )

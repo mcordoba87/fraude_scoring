@@ -21,3 +21,6 @@ dbt_fintech/logs/
 dbt_fintech/.user.yml
 # contiene credenciales (documentado en README)
 dbt_fintech/profiles.yml
+
+# CI/CD local (el workflow requiere scope 'workflow' en el token; se pushea aparte)
+.github/

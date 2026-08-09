@@ -5,6 +5,7 @@
 with base as (
     select
         user_id,
+        dbt_scd_id,
         nombre,
         scoring_crediticio,
         limite_credito,
@@ -12,16 +13,13 @@ with base as (
         location,
         dbt_valid_from,
         dbt_valid_to,
-        case
-            when dbt_valid_to is null then true
-            else false
-        end as is_current
+        coalesce(dbt_valid_to is null, false) as is_current
     from {{ ref('snap_users_scoring') }}
 )
 
 select
     user_id,
-    user_id as user_sk,
+    dbt_scd_id as user_sk,
     nombre,
     scoring_crediticio,
     limite_credito,

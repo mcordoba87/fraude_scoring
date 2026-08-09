@@ -236,6 +236,41 @@ DBT_PROFILES_DIR=$PWD ../venv/bin/dbt test         # 26 tests de calidad
 > `DBT_PROFILES_DIR`. El loader `load_lakehouse.py` es el puente que el anexo
 > de la Fase 3 dejaba pendiente (dbt-postgres no lee Parquet directo).
 
+### 10. Fase 4 — API de scoring y fraud alerts
+
+El backend `api/fintech_api.py` expone la capa Gold (`public_marts.*`) vía
+FastAPI (uvicorn local, puerto 8002):
+
+```bash
+./venv/bin/uvicorn api.fintech_api:app --host 0.0.0.0 --port 8002
+
+# Historial SCD2 del scoring de un usuario
+curl http://localhost:8002/api/v1/users/3/credit-score
+# Version vigente (404 si el usuario no existe)
+curl http://localhost:8002/api/v1/users/3/credit-score/current
+# Alertas de fraude activas (con las reglas desglosadas)
+curl http://localhost:8002/api/v1/fraud/alerts?limit=50
+# Solo de un usuario
+curl "http://localhost:8002/api/v1/fraud/alerts?user_id=22&limit=10"
+# Resumen de fraude por hora (ventana configurable, default 24h)
+curl http://localhost:8002/api/v1/fraud/alerts/summary?hours=24
+```
+
+Swagger interactivo (OpenAPI) en `http://localhost:8002/docs`.
+
+### 11. Dashboards en Metabase (Fase 4)
+
+La fuente **Data Warehouse (OLAP)** ya está conectada a los esquemas
+`public_marts` / `public_intermediate`. Guía + queries SQL listos para los
+paneles de fraude por hora, distribución por scoring y alertas en vivo en
+[`docs/metabase_dashboards.md`](docs/metabase_dashboards.md).
+
+### 12. CI/CD (GitHub Actions)
+
+El workflow `.github/workflows/ci.yml` corre en cada Pull Request:
+`sqlfluff lint` (con templater dbt) y `dbt parse` (validación de sintaxis y
+linaje sin conexión a la base, sin credenciales).
+
 ---
 
 ## Qué partes están hechas hasta ahora
@@ -270,10 +305,10 @@ DBT_PROFILES_DIR=$PWD ../venv/bin/dbt test         # 26 tests de calidad
 - [x] Worker ampliado para persistir usuarios (`users/`) y generador que
       actualiza scoring periódicamente (alimenta el SCD2).
 
-### Fase 4 — Visualización y API (PENDIENTE)
-- [ ] Dashboard Metabase / Superset
-- [ ] API FastAPI de scoring y fraud alerts
-- [ ] CI/CD GitHub Actions
+### Fase 4 — Visualización y API (COMPLETA)
+- [x] Dashboard Metabase (guía + queries listos en `docs/metabase_dashboards.md`)
+- [x] API FastAPI de scoring y fraud alerts (`api/fintech_api.py`)
+- [x] CI/CD GitHub Actions (`sqlfluff lint` + `dbt parse` en cada PR)
 
 ### Fase 5 — Documentación y presentación (EN PROGRESO)
 - [ ] Diagrama de arquitectura (placeholder en este README)
@@ -285,15 +320,6 @@ DBT_PROFILES_DIR=$PWD ../venv/bin/dbt test         # 26 tests de calidad
 ## Estructura de archivos
 
 ```
-.
-├── docker-compose.yml
-├── .env.example                 # copiar a .env (nunca commitear .env)
-├── .gitignore
-├── README.md
-├── roadmap_proyecto_fintech.txt  # roadmap con checkboxes de fases
-├── config/
-│   ├── debezium/postgres-connector.json
-│   └── init_oltp/01_init.sql    # DDL OLTP (users, transactions)
 ├── scripts/
 │   ├── generator.py             # simulador de transacciones
 │   ├── worker.py                # consumidor multi-tópico -> MinIO
@@ -302,7 +328,13 @@ DBT_PROFILES_DIR=$PWD ../venv/bin/dbt test         # 26 tests de calidad
 │   ├── load_lakehouse.py        # MinIO Parquet/CSV -> raw.* en OLAP (fase 3)
 │   └── requirements.txt
 ├── api/
-│   └── mock_cards_api.py        # Mock API de tarjetas (FastAPI, 8001)
+│   ├── mock_cards_api.py        # Mock API de tarjetas (FastAPI, 8001)
+│   └── fintech_api.py           # API de scoring/fraud alerts (Fase 4, 8002)
+├── docs/
+│   └── metabase_dashboards.md   # guía + queries de paneles (Fase 4)
+├── .github/workflows/
+│   └── ci.yml                   # sqlfluff lint + dbt parse por PR (Fase 4)
+├── .sqlfluff                    # estilo SQL (dialect postgres, templater dbt)
 ├── venv/                        # (no commiteado)
 └── dbt_fintech/                 # proyecto dbt (fase 3)
     ├── dbt_project.yml

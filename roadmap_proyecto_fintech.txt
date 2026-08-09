@@ -229,17 +229,22 @@ EJECUCIÓN (orden sugerido):
 
 FASE 4: VISUALIZACIÓN, API & SERVIDO DE DATOS
 -------------------------------------------------------------------------------
-[ ] 4.1. Dashboard Operativo en Metabase / Superset
+[X] 4.1. Dashboard Operativo en Metabase / Superset
     - Conectar herramienta de BI a las tablas de la capa Gold.
     - Crear paneles clave: % de fraude por hora/día, distribución por scoring, alertas en vivo.
+    - Guía + queries listos en docs/metabase_dashboards.md (fuente "Data
+      Warehouse (OLAP)" ya conectada; esquemas public_marts/public_intermediate).
 
-[ ] 4.2. Capa de API en FastAPI (Backend)
-    - Crear servicio api en FastAPI.
-    - Endpoint GET /api/v1/users/{id}/credit-score: Devuelve scoring histórico de dbt.
-    - Endpoint GET /api/v1/fraud/alerts: Devuelve alertas activas para frontend/app móvil.
+[X] 4.2. Capa de API en FastAPI (api/fintech_api.py, uvicorn local:8002)
+    - GET /api/v1/users/{id}/credit-score      -> historial SCD2 de scoring.
+    - GET /api/v1/users/{id}/credit-score/current -> version vigente (404 si no).
+    - GET /api/v1/fraud/alerts                 -> alertas activas + reglas
+      (limit y user_id opcionales).
+    - GET /api/v1/fraud/alerts/summary         -> % de fraude por hora.
 
-[ ] 4.3. Automatización y CI/CD (GitHub Actions)
-    - Configurar workflow que ejecute `sqlfluff lint` y `dbt test` en cada Pull Request.
+[X] 4.3. Automatización y CI/CD (.github/workflows/ci.yml)
+    - Workflow en cada PR: sqlfluff lint (+templater dbt) y dbt parse,
+      sin conexion a BD (sin secretos).
 
 
 FASE 5: DOCUMENTACIÓN Y PRESENTACIÓN EN GITHUB

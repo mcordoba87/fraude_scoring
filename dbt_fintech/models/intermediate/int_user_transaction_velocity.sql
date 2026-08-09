@@ -27,4 +27,4 @@ select
     {{ sum_tx('t.user_id', 't.created_at', "interval '15 minute'") }}    as sum_15min,
     {{ count_tx('t.user_id', 't.created_at', "interval '60 minute'") }}  as cnt_60min,
     {{ sum_tx('t.user_id', 't.created_at', "interval '60 minute'") }}    as sum_60min
-from txs t
+from txs as t

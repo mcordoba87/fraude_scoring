@@ -6,13 +6,15 @@ incluyendo patrones de fraude simulados.
 Uso:
     ./venv/bin/python scripts/generator.py            # corrida indefinida
     ./venv/bin/python scripts/generator.py --limit 50 # transacciones fijas
+    ./venv/bin/python scripts/generator.py --limit 50 --date YYYY-MM-DD
+        # fecha fija para created_at (default: now()/UTC)
 """
 
 import argparse
 import os
 import random
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import psycopg2
 
@@ -153,7 +155,13 @@ def main():
                         help="Transacciones a generar (0 = indefinido)")
     parser.add_argument("--delay", type=float, default=0.8,
                         help="Segundos entre transacciones")
+    parser.add_argument("--date", default=None,
+                        help="Fecha fija YYYY-MM-DD para created_at (default: ahora/UTC)")
     args = parser.parse_args()
+
+    target_date = None
+    if args.date:
+        target_date = datetime.strptime(args.date, "%Y-%m-%d").date()
 
     conn = psycopg2.connect(**DB_CONFIG)
     try:
@@ -168,12 +176,19 @@ def main():
         print("[generator] Generando transacciones (Ctrl+C para detener)...")
         while True:
             tx = build_transaction(random.choice(users))
+            if target_date:
+                ts = datetime(
+                    target_date.year, target_date.month, target_date.day,
+                    tzinfo=timezone.utc,
+                ) + timedelta(seconds=random.randint(0, 86399))
+            else:
+                ts = None
             cur.execute(
                 """INSERT INTO transactions
                    (user_id, amount, merchant_category, location, is_flagged_fraud, created_at)
-                   VALUES (%s, %s, %s, %s, %s, now())""",
+                   VALUES (%s, %s, %s, %s, %s, COALESCE(%s, now()))""",
                 (tx["user_id"], tx["amount"], tx["merchant_category"],
-                 tx["location"], tx["is_flagged_fraud"]),
+                 tx["location"], tx["is_flagged_fraud"], ts),
             )
             conn.commit()
             count += 1

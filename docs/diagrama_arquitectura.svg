@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="840" viewBox="0 0 1280 840" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <title>Arquitectura: Pipeline de Detección de Fraude y Scoring de Crédito</title>
+
+  <style>
+    .band { fill: #f8fafc; stroke: #d1d5db; stroke-width: 1; stroke-dasharray: 5 4; }
+    .band-title { font-size: 13px; font-weight: 700; fill: #475569; }
+    .node { fill: #eaf2ff; stroke: #3b82f6; stroke-width: 1.2; }
+    .node-title { font-size: 13px; font-weight: 700; fill: #111827; }
+    .node-sub { font-size: 10.5px; fill: #4b5563; }
+    .edge { stroke: #64748b; stroke-width: 1.4; fill: none; marker-end: url(#arrow); }
+    .edge-no-arrow { stroke: #94a3b8; stroke-width: 1.2; fill: none; }
+    .edge-label { font-size: 10.5px; fill: #475569; }
+  </style>
+
+  <!-- ============ BANDAS ============ -->
+  <rect class="band" x="40"  y="20"  width="1220" height="146" rx="10"/>
+  <text class="band-title" x="52" y="42">FUENTES DE DATOS</text>
+
+  <rect class="band" x="40"  y="180" width="1220" height="216" rx="10"/>
+  <text class="band-title" x="52" y="202">STREAMING / CDC</text>
+
+  <rect class="band" x="40"  y="400" width="1220" height="134" rx="10"/>
+  <text class="band-title" x="52" y="422">LAKEHOUSE (MinIO :9000)</text>
+
+  <rect class="band" x="40"  y="560" width="1220" height="120" rx="10"/>
+  <text class="band-title" x="52" y="582">DATA WAREHOUSE (PostgreSQL OLAP :5433)</text>
+
+  <rect class="band" x="40"  y="700" width="1220" height="120" rx="10"/>
+  <text class="band-title" x="52" y="722">CONSUMO / SERVIR</text>
+
+  <!-- ============ FLECHAS ============ -->
+  <!-- A -> D -->
+  <path class="edge" d="M205,150 V210"/>
+  <text class="edge-label" x="280" y="188" text-anchor="middle">CDC (wal_level=logical)</text>
+  <!-- D -> E -->
+  <path class="edge" d="M350,250 H455"/>
+  <text class="edge-label" x="402" y="242" text-anchor="middle">eventos</text>
+  <!-- B -> F -->
+  <path class="edge" d="M600,150 L1040,210"/>
+  <text class="edge-label" x="827" y="182" text-anchor="middle">GET /cards (crudo)</text>
+  <!-- F -> E -->
+  <path class="edge" d="M895,250 H835"/>
+  <text class="edge-label" x="865" y="242" text-anchor="middle">cards.api</text>
+  <!-- E -> G -->
+  <path class="edge" d="M600,290 V304"/>
+  <text class="edge-label" x="612" y="299">consume</text>
+  <!-- G -> H -->
+  <path class="edge" d="M470,384 V398 H205 V440"/>
+  <text class="edge-label" x="338" y="394" text-anchor="middle">transactions / users</text>
+  <!-- G -> I -->
+  <path class="edge" d="M630,384 V440"/>
+  <text class="edge-label" x="642" y="416">cards</text>
+  <!-- C -> J (por margen derecho) -->
+  <path class="edge" d="M995,150 H1200 V480 H1140"/>
+  <text class="edge-label" x="1214" y="360" text-anchor="middle" transform="rotate(-90 1214 360)">CSV diario (landing)</text>
+  <!-- H -> K -->
+  <path class="edge" d="M205,520 V584"/>
+  <text class="edge-label" x="215" y="556">raw.* (loader)</text>
+  <!-- I -> K -->
+  <path class="edge" d="M600,520 V552 H300 V584"/>
+  <!-- J -> K -->
+  <path class="edge" d="M995,520 V556 H350 V584"/>
+  <!-- K -> L -->
+  <path class="edge" d="M350,624 H455"/>
+  <!-- L -> M -->
+  <path class="edge" d="M745,624 H850"/>
+  <!-- M -> N -->
+  <path class="edge" d="M995,664 V690 H205 V714"/>
+  <text class="edge-label" x="400" y="686" text-anchor="middle">dashboards</text>
+  <!-- M -> O -->
+  <path class="edge" d="M995,664 V699 H600 V714"/>
+  <text class="edge-label" x="722" y="695" text-anchor="middle">REST /json</text>
+
+  <!-- ============ NODOS ============ -->
+  <!-- FUENTES -->
+  <g>
+    <rect class="node" x="60"  y="70" width="290" height="80" rx="8"/>
+    <text class="node-title" x="205" y="96" text-anchor="middle">PostgreSQL OLTP</text>
+    <text class="node-sub" x="205" y="114" text-anchor="middle">users / transactions</text>
+    <text class="node-sub" x="205" y="129" text-anchor="middle">Docker :5432</text>
+  </g>
+  <g>
+    <rect class="node" x="455" y="70" width="290" height="80" rx="8"/>
+    <text class="node-title" x="600" y="96" text-anchor="middle">Mock Cards API</text>
+    <text class="node-sub" x="600" y="114" text-anchor="middle">PAN / CVV / cardholder (PII)</text>
+    <text class="node-sub" x="600" y="129" text-anchor="middle">FastAPI :8001</text>
+  </g>
+  <g>
+    <rect class="node" x="850" y="70" width="290" height="80" rx="8"/>
+    <text class="node-title" x="995" y="96" text-anchor="middle">daily_batch_csv.py</text>
+    <text class="node-sub" x="995" y="114" text-anchor="middle">CSV diario (sistema legacy)</text>
+    <text class="node-sub" x="995" y="129" text-anchor="middle">batch programado</text>
+  </g>
+
+  <!-- STREAMING -->
+  <g>
+    <rect class="node" x="60" y="210" width="290" height="80" rx="8"/>
+    <text class="node-title" x="205" y="236" text-anchor="middle">Debezium CDC</text>
+    <text class="node-sub" x="205" y="254" text-anchor="middle">Kafka Connect :8083</text>
+    <text class="node-sub" x="205" y="269" text-anchor="middle">Postgres -> tópicos</text>
+  </g>
+  <g>
+    <rect class="node" x="455" y="210" width="380" height="80" rx="8"/>
+    <text class="node-title" x="645" y="236" text-anchor="middle">Redpanda (broker Kafka :9092)</text>
+    <text class="node-sub" x="645" y="254" text-anchor="middle">transactions / users / cards.api</text>
+    <text class="node-sub" x="645" y="269" text-anchor="middle">topologia de eventos central</text>
+  </g>
+  <g>
+    <rect class="node" x="895" y="210" width="290" height="80" rx="8"/>
+    <text class="node-title" x="1040" y="236" text-anchor="middle">ingest_cards.py</text>
+    <text class="node-sub" x="1040" y="254" text-anchor="middle">anonimización PII / PCI-DSS</text>
+    <text class="node-sub" x="1040" y="269" text-anchor="middle">PAN -> últimos 4 · CVV descartado</text>
+  </g>
+  <g>
+    <rect class="node" x="455" y="304" width="290" height="80" rx="8"/>
+    <text class="node-title" x="600" y="330" text-anchor="middle">worker.py</text>
+    <text class="node-sub" x="600" y="348" text-anchor="middle">consumidor multi-tópico</text>
+    <text class="node-sub" x="600" y="363" text-anchor="middle">baches -> Parquet (MinIO)</text>
+  </g>
+
+  <!-- LAKEHOUSE -->
+  <g>
+    <rect class="node" x="60" y="440" width="290" height="80" rx="8"/>
+    <text class="node-title" x="205" y="466" text-anchor="middle">transactions/ · users/</text>
+    <text class="node-sub" x="205" y="484" text-anchor="middle">Parquet particionado CDC</text>
+    <text class="node-sub" x="205" y="499" text-anchor="middle">sink del worker</text>
+  </g>
+  <g>
+    <rect class="node" x="455" y="440" width="290" height="80" rx="8"/>
+    <text class="node-title" x="600" y="466" text-anchor="middle">cards/</text>
+    <text class="node-sub" x="600" y="484" text-anchor="middle">Parquet anonimizado</text>
+    <text class="node-sub" x="600" y="499" text-anchor="middle">sin PAN / CVV</text>
+  </g>
+  <g>
+    <rect class="node" x="850" y="440" width="290" height="80" rx="8"/>
+    <text class="node-title" x="995" y="466" text-anchor="middle">landing/cards_daily/</text>
+    <text class="node-sub" x="995" y="484" text-anchor="middle">CSV crudo</text>
+    <text class="node-sub" x="995" y="499" text-anchor="middle">YYYY-MM-DD/movimientos.csv</text>
+  </g>
+
+  <!-- DW -->
+  <g>
+    <rect class="node" x="60" y="584" width="290" height="80" rx="8"/>
+    <text class="node-title" x="205" y="610" text-anchor="middle">raw.*</text>
+    <text class="node-sub" x="205" y="628" text-anchor="middle">load_lakehouse.py (bridge)</text>
+    <text class="node-sub" x="205" y="643" text-anchor="middle">MinIO -> OLAP</text>
+  </g>
+  <g>
+    <rect class="node" x="455" y="584" width="290" height="80" rx="8"/>
+    <text class="node-title" x="600" y="610" text-anchor="middle">dbt Core</text>
+    <text class="node-sub" x="600" y="628" text-anchor="middle">staging -&gt; intermediate -&gt; marts</text>
+    <text class="node-sub" x="600" y="643" text-anchor="middle">snapshot SCD2 de scoring</text>
+  </g>
+  <g>
+    <rect class="node" x="850" y="584" width="290" height="80" rx="8"/>
+    <text class="node-title" x="995" y="610" text-anchor="middle">dim_users / fct_transactions</text>
+    <text class="node-sub" x="995" y="628" text-anchor="middle">fct_fraud_alerts</text>
+    <text class="node-sub" x="995" y="643" text-anchor="middle">capa Gold (Kimball)</text>
+  </g>
+
+  <!-- CONSUMO -->
+  <g>
+    <rect class="node" x="60" y="714" width="290" height="80" rx="8"/>
+    <text class="node-title" x="205" y="740" text-anchor="middle">Metabase</text>
+    <text class="node-sub" x="205" y="758" text-anchor="middle">BI / dashboards :3000</text>
+    <text class="node-sub" x="205" y="773" text-anchor="middle">fraude por hora / alertas en vivo</text>
+  </g>
+  <g>
+    <rect class="node" x="455" y="714" width="290" height="80" rx="8"/>
+    <text class="node-title" x="600" y="740" text-anchor="middle">fintech_api.py</text>
+    <text class="node-sub" x="600" y="758" text-anchor="middle">FastAPI :8002</text>
+    <text class="node-sub" x="600" y="773" text-anchor="middle">credit-score / fraud alerts</text>
+  </g>
+</svg>

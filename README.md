@@ -62,6 +62,13 @@ fintech, con tres usos principales:
 
 ## Arquitectura (resumen)
 
+![Diagrama de arquitectura del pipeline](docs/diagrama_arquitectura.svg)
+
+_Fuente editable del diagrama en
+[`docs/diagrama_arquitectura.mmd`](docs/diagrama_arquitectura.mmd)._
+
+Detalle en texto plano de los flujos:
+
 ```
    FLUJO 1 - TRANSACCIONES (streaming / CDC)
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -168,6 +175,9 @@ curl -s http://localhost:8083/connectors   # -> ["fintech-postgres-oltp"]
 ```bash
 # Simular transacciones (OLTP)
 ./venv/bin/python scripts/generator.py --limit 150
+
+# Generar para una fecha especifica (created_at fijo, util para backfill)
+./venv/bin/python scripts/generator.py --limit 300 --date 2026-08-08
 
 # Levantar el Mock API de tarjetas (PII) en segundo plano
 ./venv/bin/uvicorn api.mock_cards_api:app --host 0.0.0.0 --port 8001 &
@@ -311,9 +321,11 @@ linaje sin conexión a la base, sin credenciales).
 - [x] CI/CD GitHub Actions (`sqlfluff lint` + `dbt parse` en cada PR)
 
 ### Fase 5 — Documentación y presentación (EN PROGRESO)
-- [ ] Diagrama de arquitectura (placeholder en este README)
+- [x] Diagrama de arquitectura (SVG generado desde
+      [`docs/diagrama_arquitectura.mmd`](docs/diagrama_arquitectura.mmd))
 - [x] README.md (este archivo)
-- [ ] Capturas de pantalla
+- [ ] Capturas de pantalla (pendiente: Redpanda Console, linaje de dbt,
+      dashboard de Metabase)
 
 ---
 
@@ -331,7 +343,9 @@ linaje sin conexión a la base, sin credenciales).
 │   ├── mock_cards_api.py        # Mock API de tarjetas (FastAPI, 8001)
 │   └── fintech_api.py           # API de scoring/fraud alerts (Fase 4, 8002)
 ├── docs/
-│   └── metabase_dashboards.md   # guía + queries de paneles (Fase 4)
+│   ├── metabase_dashboards.md    # guía + queries de paneles (Fase 4)
+│   ├── diagrama_arquitectura.mmd # fuente Mermaid del diagrama (Fase 5)
+│   └── diagrama_arquitectura.svg # diagrama renderizado (Fase 5)
 ├── .github/workflows/
 │   └── ci.yml                   # sqlfluff lint + dbt parse por PR (Fase 4)
 ├── .sqlfluff                    # estilo SQL (dialect postgres, templater dbt)

@@ -249,10 +249,13 @@ FASE 4: VISUALIZACIÓN, API & SERVIDO DE DATOS
 
 FASE 5: DOCUMENTACIÓN Y PRESENTACIÓN EN GITHUB
 -------------------------------------------------------------------------------
-[ ] 5.1. Diagrama de Arquitectura
+[X] 5.1. Diagrama de Arquitectura
     - Diseñar e incluir diagrama (Mermaid.js o imagen) con el flujo de datos.
+    - Hecho: docs/diagrama_arquitectura.mmd (fuente) -> docs/diagrama_arquitectura.svg
+      (renderizado estático, integrado en README.md).
 
 [ ] 5.2. Redacción de README.md
     - Visión general, caso de negocio, stack tecnológico e instrucciones Quickstart (`docker compose up`).
-    - Galería con capturas de pantalla (Redpanda, linaje de dbt, Dashboard).
+    - Hecho: README.md completo (Quickstart, fases 1-4, arquitectura). 
+      Nota: galería de capturas aún PENDIENTE (Redpanda, linaje de dbt, Dashboard).
 ===============================================================================

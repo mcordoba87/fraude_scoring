@@ -1,0 +1,40 @@
+flowchart LR
+    subgraph FUENTES["Fuentes de datos"]
+        A["PostgreSQL OLTP (Docker :5432)<br/>users / transactions<br/>wal_level = logical"]
+        B["Mock Cards API (FastAPI :8001)<br/>PAN / CVV / cardholder<br/>(PII crudo)"]
+        C["daily_batch_csv.py<br/>CSV diario (sistema legacy)"]
+    end
+
+    subgraph STREAM["Streaming / CDC"]
+        D["Debezium CDC<br/>Kafka Connect :8083"]
+        E["Redpanda (broker Kafka :9092)<br/>topicos transactions / users / cards.api"]
+        F["ingest_cards.py<br/>anonimizacion PII / PCI-DSS:<br/>PAN -> ultimos 4 / CVV descartado"]
+        G["worker.py<br/>consumer multi-topico -> Parquet"]
+    end
+
+    subgraph LAKE["Lakehouse (MinIO :9000)"]
+        H["transactions/ / users/<br/>(Parquet particionado CDC)"]
+        I["cards/<br/>(Parquet anonimizado, sin PAN/CVV)"]
+        J["landing/cards_daily/<br/>(CSV crudo)"]
+    end
+
+    subgraph DW["Data Warehouse (PostgreSQL OLAP :5433)"]
+        K["raw.*<br/>load_lakehouse.py (bridge)"]
+        L["dbt Core<br/>staging > intermediate > marts"]
+        M["dim_users / fct_transactions<br/>fct_fraud_alerts / snapshot SCD2"]
+    end
+
+    subgraph CONSUMO["Consumo / Servir"]
+        N["Metabase (BI :3000)<br/>dashboards de fraude"]
+        O["fintech_api.py (FastAPI :8002)<br/>credit-score / fraud alerts"]
+    end
+
+    A -->|CDC / logical replication| D --> E --> G --> H
+    B -->|GET /cards (crudo)| F -->|cards.api| E
+    C -->|CSV diario| J
+    H --> K
+    I --> K
+    J --> K
+    K --> L --> M
+    M --> N
+    M --> O
